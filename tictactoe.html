@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>✏️ Pencil Tic‑Tac‑Toe Deluxe</title>
+  <link href="https://fonts.googleapis.com/css2?family=Just+Another+Hand&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    body, html {
+      margin:0; padding:0; width:100%; height:100%;
+      background: url('https://image.freepik.com/free-photo/pencil-piece-lined-notebook-paper.jpg') center/cover;
+      /* above is the lined paper texture texture :contentReference[oaicite:2]{index=2} */
+      font-family:'Just Another Hand', cursive;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+    }
+    #scoreboard { margin-bottom:10px; font-size:1.2rem; }
+    #board {
+      position:relative;
+      display:grid;
+      grid:repeat(3,120px)/repeat(3,120px);
+      gap:5px;
+      background:rgba(255,255,255,0.8);
+      padding:10px;
+      box-shadow:0 0 10px rgba(0,0,0,0.3);
+    }
+    .cell {
+      background:#fff;
+      border:2px solid #666;
+      font-size:3rem; color:#333;
+      display:flex; align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      transition:transform .1s, background .2s, box-shadow .2s;
+      user-select:none;
+    }
+    .cell:hover {
+      transform:scale(1.05);
+      background:linear-gradient(
+        135deg,
+        transparent 60%,
+        rgba(200,200,200,0.3) 60%
+      );
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+    }
+    #winline {
+      position:absolute; top:0; left:0;
+      width:100%; height:100%;
+      pointer-events:none;
+    }
+    #controls {
+      margin-top:10px;
+    }
+    button {
+      font-family:'Just Another Hand';
+      font-size:1.1rem;
+      padding:6px 12px;
+      margin:0 5px;
+      border:2px solid #666;
+      background:#fff;
+      cursor:pointer;
+      transition:background .2s;
+    }
+    button:hover { background:#eee; }
+    #popup {
+      display:none;
+      position:fixed; top:0; left:0;
+      width:100%; height:100%;
+      background:rgba(0,0,0,0.5);
+      align-items:center; justify-content:center;
+    }
+    #popup .msg {
+      background:#fff; padding:20px 30px;
+      border:3px solid #666;
+      font-size:1.4rem; text-align:center;
+      box-shadow:0 0 10px rgba(0,0,0,0.3);
+    }
+    #popup .msg button { margin-top:15px; }
+  </style>
+</head>
+<body>
+  <div id="scoreboard">X: <span id="scoreX">0</span> | O: <span id="scoreO">0</span></div>
+  <div id="board"></div>
+  <svg id="winline"></svg>
+  <div id="controls">
+    <button id="newGame">New Game</button>
+    <button id="download">Download Board</button>
+  </div>
+  <div id="popup">
+    <div class="msg">
+      <span id="popupText"></span><br>
+      <button id="popupBtn">OK</button>
+    </div>
+  </div>
+
+  <script>
+    const boardEl = document.getElementById('board');
+    const popup = document.getElementById('popup');
+    const popupText = document.getElementById('popupText');
+    const popupBtn = document.getElementById('popupBtn');
+    const scoreX = document.getElementById('scoreX');
+    const scoreO = document.getElementById('scoreO');
+    const newGameBtn = document.getElementById('newGame');
+    const downloadBtn = document.getElementById('download');
+    const winSVG = document.getElementById('winline');
+
+    let state = Array(9).fill('');
+    let turn = 'X', moves = 0;
+    let scores = JSON.parse(localStorage.getItem('ttt-scores')) || {X:0, O:0};
+    scoreX.textContent = scores.X;
+    scoreO.textContent = scores.O;
+
+    const wins = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+    const coords = [
+      [0, .166, 1, .166],[0, .5, 1, .5],[0, .833, 1, .833],
+      [.166, 0, .166, 1],[.5, 0, .5, 1],[.833, 0, .833, 1],
+      [0, 0, 1,1],[1,0,0,1]
+    ];
+
+    function checkWin() {
+      for(let i=0;i<8;i++){
+        const [a,b,c] = wins[i];
+        if(state[a] && state[a] === state[b] && state[b] === state[c]) return i;
+      }
+      return -1;
+    }
+
+    function drawWinLine(idx) {
+      const [x1,y1,x2,y2] = coords[idx];
+      winSVG.innerHTML = `<line x1="${x1*100}%" y1="${y1*100}%" x2="${x2*100}%" y2="${y2*100}%" stroke="red" stroke-width="8"/>`;
+    }
+
+    function showPopup(msg, cb) {
+      popupText.textContent = msg;
+      popup.style.display = 'flex';
+      popupBtn.onclick = () => { popup.style.display = 'none'; cb(); };
+    }
+
+    function confettiCelebrate(){
+      confetti({ particleCount:150, spread:60, origin:{y:0.6} });
+    }
+
+    function initBoard() {
+      boardEl.innerHTML = '';
+      winSVG.innerHTML = '';
+      state.fill('');
+      turn = 'X'; moves = 0;
+      for(let i=0;i<9;i++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.addEventListener('click', () => {
+          if(state[i]||checkWin()>=0) return;
+          state[i] = turn;
+          cell.textContent = turn;
+          moves++;
+          const wIdx = checkWin();
+          if(wIdx>=0){
+            drawWinLine(wIdx);
+            scores[turn]++;
+            localStorage.setItem('ttt-scores', JSON.stringify(scores));
+            scoreX.textContent = scores.X;
+            scoreO.textContent = scores.O;
+            confettiCelebrate();
+            showPopup(`${turn} wins!`, initBoard);
+          } else if(moves === 9){
+            confettiCelebrate();
+            showPopup("It's a draw!", initBoard);
+          } else {
+            turn = turn === 'X' ? 'O' : 'X';
+          }
+        });
+        boardEl.appendChild(cell);
+      }
+    }
+
+    newGameBtn.addEventListener('click', initBoard);
+
+    downloadBtn.addEventListener('click', () => {
+      html2canvas(boardEl).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'tic-tac-toe.png';
+        link.href = canvas.toDataURL();
+        link.click();
+      });
+    });
+
+    window.onload = initBoard;
+  </script>
+</body>
+</html>
